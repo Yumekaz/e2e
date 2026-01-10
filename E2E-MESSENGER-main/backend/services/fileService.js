@@ -110,7 +110,7 @@ class FileService {
     return {
       id: attachment.id,
       filename: encrypted ? originalName : attachment.filename,
-      url: `/uploads/${attachment.filepath}`,
+      url: `/api/files/${attachment.id}`,
       mimetype: encrypted ? originalType : attachment.mimetype,
       size: encrypted ? originalSize : attachment.size,
       encrypted: encrypted || false,

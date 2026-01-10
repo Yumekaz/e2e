@@ -18,6 +18,7 @@ const fs = require('fs');
 const { Server } = require('socket.io');
 const path = require('path');
 const os = require('os');
+const cors = require('cors');
 
 // SSL certificate paths
 const SSL_KEY_PATH = path.join(__dirname, 'ssl', 'key.pem');
@@ -80,6 +81,14 @@ if (httpsServer) {
 }
 
 // ==================== MIDDLEWARE ====================
+
+// CORS - Allow all origins in development
+app.use(cors({
+  origin: '*',
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization'],
+  credentials: true
+}));
 
 // Request logging
 app.use(requestLogger);
@@ -152,20 +161,27 @@ app.get('/api/network-info', (req, res) => {
   });
 });
 
-// Rate limiting for other API routes
-app.use('/api', apiRateLimiter);
+// Rate limiting for API routes (except file downloads)
+// File downloads are excluded because multiple images can load simultaneously
+app.use('/api', (req, res, next) => {
+  // Skip rate limiting for file GET requests (downloads)
+  if (req.path.startsWith('/files/') && req.method === 'GET') {
+    return next();
+  }
+  return apiRateLimiter(req, res, next);
+});
 
 // ==================== STATIC FILES ====================
 
-// Serve uploaded files
-app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
+// Uploaded files now served via authenticated /api/files/:id endpoint
+// app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 
 // Serve frontend build
 app.use(express.static(path.join(__dirname, 'public_build')));
 
 // ==================== PROTECTED API ROUTES ====================
 
-// Mount route modules (these are rate-limited)
+// Mount route modules (file downloads excluded from rate limiting above)
 app.use('/api/auth', authRoutes);
 app.use('/api/rooms', roomRoutes);
 app.use('/api/files', fileRoutes);

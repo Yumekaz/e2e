@@ -85,6 +85,7 @@ async function initializeDatabase() {
       room_code TEXT NOT NULL,
       owner_id INTEGER,
       owner_username TEXT NOT NULL,
+      room_type TEXT DEFAULT 'legacy' CHECK(room_type IN ('legacy', 'authenticated')),
       created_at TEXT DEFAULT (datetime('now')),
       FOREIGN KEY(owner_id) REFERENCES users(id) ON DELETE SET NULL
     );
@@ -292,16 +293,16 @@ function cleanupExpiredTokens() {
 
 // ==================== ROOM OPERATIONS ====================
 
-function createRoom(roomId, roomCode, ownerId, ownerUsername) {
+function createRoom(roomId, roomCode, ownerId, ownerUsername, roomType = 'legacy') {
   runQuery(
-    `INSERT INTO rooms (room_id, room_code, owner_id, owner_username) VALUES (?, ?, ?, ?)`,
-    [roomId, roomCode, ownerId, ownerUsername]
+    `INSERT INTO rooms (room_id, room_code, owner_id, owner_username, room_type) VALUES (?, ?, ?, ?, ?)`,
+    [roomId, roomCode, ownerId, ownerUsername, roomType]
   );
   runQuery(
     `INSERT INTO room_members (room_id, user_id, username) VALUES (?, ?, ?)`,
     [roomId, ownerId, ownerUsername]
   );
-  return { roomId, roomCode, ownerId, ownerUsername };
+  return { roomId, roomCode, ownerId, ownerUsername, roomType };
 }
 
 function getRoomByCode(roomCode) {

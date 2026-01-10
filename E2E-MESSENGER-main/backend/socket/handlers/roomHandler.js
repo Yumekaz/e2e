@@ -30,11 +30,15 @@ function createRoomHandler(io, socket, state) {
     const roomId = `room_${state.roomCounter++}_${Date.now()}`;
     const roomCode = generateRoomCode();
 
+    // Determine room type based on user authentication
+    const roomType = user.id ? 'authenticated' : 'legacy';
+
     const room = {
       owner: user.username,
       ownerId: user.id,
       ownerSocketId: socket.id,
       code: roomCode,
+      roomType: roomType,
       members: new Map([[user.username, user.publicKey]]),
       encryptedMessages: [],
     };
@@ -43,11 +47,11 @@ function createRoomHandler(io, socket, state) {
     socket.join(roomId);
     socketToRooms.get(socket.id).add(roomId);
 
-    // Persist to database
-    db.createRoom(roomId, roomCode, user.id, user.username);
+    // Persist to database with room type
+    db.createRoom(roomId, roomCode, user.id, user.username, roomType);
 
-    socket.emit('room-created', { roomId, roomCode });
-    logger.info('Room created', { roomId, roomCode, owner: user.username });
+    socket.emit('room-created', { roomId, roomCode, roomType });
+    logger.info('Room created', { roomId, roomCode, owner: user.username, roomType });
   });
 
   /**
@@ -77,6 +81,24 @@ function createRoomHandler(io, socket, state) {
     // Check if already a member (via database)
     if (db.isRoomMember(dbRoom.room_id, user.username)) {
       socket.emit('error', { message: 'Already in room' });
+      return;
+    }
+
+    // SECURITY: Enforce room type restrictions
+    const userType = user.id ? 'authenticated' : 'legacy';
+    const roomType = dbRoom.room_type || 'legacy'; // Default to legacy for old rooms
+
+    if (userType !== roomType) {
+      const errorMsg = userType === 'authenticated'
+        ? 'Authenticated users cannot join legacy rooms. Please create your own room.'
+        : 'This room requires authentication. Please sign up or log in first.';
+      socket.emit('error', { message: errorMsg });
+      logger.warn('Room type mismatch', {
+        username: user.username,
+        userType,
+        roomType,
+        roomCode
+      });
       return;
     }
 
@@ -162,6 +184,7 @@ function createRoomHandler(io, socket, state) {
       requesterSocket.emit('join-approved', {
         roomId: request.roomId,
         roomCode: request.roomCode || dbRoom.room_code,
+        roomType: dbRoom.room_type || 'legacy',
         memberKeys,
       });
 
@@ -227,6 +250,21 @@ function createRoomHandler(io, socket, state) {
       return;
     }
 
+    // SECURITY: Verify room type still matches user type (prevent type switching)
+    const userType = user.id ? 'authenticated' : 'legacy';
+    const roomType = dbRoom.room_type || 'legacy';
+
+    if (userType !== roomType) {
+      socket.emit('error', { message: 'Room type access denied' });
+      logger.warn('Room type mismatch on rejoin', {
+        username: user.username,
+        userType,
+        roomType,
+        roomId
+      });
+      return;
+    }
+
     socket.join(roomId);
     socketToRooms.get(socket.id)?.add(roomId);
 
@@ -251,7 +289,7 @@ function createRoomHandler(io, socket, state) {
         senderUsername: msg.sender_username,
         encryptedData: msg.encrypted_data,
         iv: msg.iv,
-        timestamp: new Date(msg.sent_at).getTime(),
+        timestamp: new Date(msg.created_at).getTime(),
       };
 
       if (msg.attachment_id) {

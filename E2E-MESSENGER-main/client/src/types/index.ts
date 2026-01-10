@@ -112,6 +112,7 @@ export interface Attachment {
   encrypted?: boolean;
   iv?: string | null;
   metadata?: string | null;
+  decryptedUrl?: string;
 }
 
 export interface EncryptedAttachment extends Attachment {
@@ -226,6 +227,7 @@ export interface RoomPageProps {
   encryption: RoomEncryptionInterface;
   onUpdateRoomKey: (memberKeys: Record<string, string>) => Promise<void>;
   onLeave: () => void;
+  roomType?: 'legacy' | 'authenticated';
 }
 
 export interface FileUploadProps {

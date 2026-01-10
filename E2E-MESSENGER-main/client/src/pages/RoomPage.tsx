@@ -27,14 +27,15 @@ interface MessageWithAttachment extends DecryptedMessage {
   attachment?: EncryptedAttachmentData;
 }
 
-function RoomPage({ 
-  roomId, 
-  roomCode, 
-  username, 
-  isOwner, 
-  encryption, 
-  onUpdateRoomKey, 
-  onLeave 
+function RoomPage({
+  roomId,
+  roomCode,
+  username,
+  isOwner,
+  encryption,
+  onUpdateRoomKey,
+  onLeave,
+  roomType = 'legacy'
 }: RoomPageProps): JSX.Element {
   const [messages, setMessages] = useState<Message[]>([]);
   const [members, setMembers] = useState<string[]>([]);
@@ -47,7 +48,10 @@ function RoomPage({
   const [serverUrl, setServerUrl] = useState<string>('');
   const [uploadingFile, setUploadingFile] = useState<boolean>(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const messagesContainerRef = useRef<HTMLDivElement>(null);
   const typingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const prevMessagesLengthRef = useRef<number>(0);
+  const userHasScrolledRef = useRef<boolean>(false);
 
   // Decrypt an attachment and return a blob URL
   const decryptAttachment = async (attachment: EncryptedAttachmentData): Promise<string | null> => {
@@ -189,8 +193,47 @@ function RoomPage({
     };
   }, [roomId, encryption, onUpdateRoomKey]);
 
+  // Mark that user has manually scrolled
+  const handleScroll = () => {
+    const container = messagesContainerRef.current;
+    if (!container) return;
+
+    const { scrollTop, scrollHeight, clientHeight } = container;
+    const distanceFromBottom = scrollHeight - scrollTop - clientHeight;
+
+    // If user scrolled up more than 150px, mark as manually scrolled
+    if (distanceFromBottom > 150) {
+      userHasScrolledRef.current = true;
+    } else {
+      // If they scroll back near bottom, re-enable auto-scroll
+      userHasScrolledRef.current = false;
+    }
+  };
+
+  // Handle touch events for mobile
+  const handleTouchStart = () => {
+    handleScroll();
+  };
+
+  const handleTouchMove = () => {
+    handleScroll();
+  };
+
+  const handleTouchEnd = () => {
+    handleScroll();
+  };
+
+  // Auto-scroll to bottom on new messages (unless user scrolled up)
   useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+    const hasNewMessages = messages.length > prevMessagesLengthRef.current;
+    prevMessagesLengthRef.current = messages.length;
+
+    // Only auto-scroll if: 1) new messages added, 2) user hasn't scrolled up
+    if (hasNewMessages && !userHasScrolledRef.current) {
+      setTimeout(() => {
+        messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+      }, 100);
+    }
   }, [messages]);
 
   const handleSendMessage = async (e: FormEvent<HTMLFormElement>): Promise<void> => {
@@ -247,7 +290,21 @@ function RoomPage({
 
   const formatTime = (timestamp: number): string => {
     const date = new Date(timestamp);
-    return date.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
+    const now = new Date();
+    const isToday = date.toDateString() === now.toDateString();
+
+    if (isToday) {
+      // Today: show time only
+      return date.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
+    } else {
+      // Other days: show date and time
+      return date.toLocaleString('en-US', {
+        month: 'short',
+        day: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit'
+      });
+    }
   };
 
   const copyRoomCode = (): void => {
@@ -287,6 +344,34 @@ function RoomPage({
               <h3>
                 <span className="lock-icon">🔒</span>
                 Room {roomCode}
+                {roomType === 'authenticated' && (
+                  <span style={{
+                    marginLeft: '8px',
+                    fontSize: '11px',
+                    padding: '2px 8px',
+                    background: '#4CAF50',
+                    color: 'white',
+                    borderRadius: '12px',
+                    fontWeight: 'normal',
+                    verticalAlign: 'middle'
+                  }}>
+                    ✓ Authenticated
+                  </span>
+                )}
+                {roomType === 'legacy' && (
+                  <span style={{
+                    marginLeft: '8px',
+                    fontSize: '11px',
+                    padding: '2px 8px',
+                    background: '#FF9800',
+                    color: 'white',
+                    borderRadius: '12px',
+                    fontWeight: 'normal',
+                    verticalAlign: 'middle'
+                  }}>
+                    Legacy
+                  </span>
+                )}
               </h3>
               <span className="member-count">{members.length} member{members.length !== 1 ? 's' : ''}</span>
             </div>
@@ -383,7 +468,14 @@ function RoomPage({
 
         <div className="room-content">
           {/* Messages Area */}
-          <div className="messages-container">
+          <div
+            className="messages-container"
+            ref={messagesContainerRef}
+            onScroll={handleScroll}
+            onTouchStart={handleTouchStart}
+            onTouchMove={handleTouchMove}
+            onTouchEnd={handleTouchEnd}
+          >
             <div className="encryption-banner">
               <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" className="banner-icon">
                 <path d="M12 2L4 6V12C4 17 8 21 12 22C16 21 20 17 20 12V6L12 2Z" stroke="currentColor" strokeWidth="1.5" />
@@ -411,13 +503,9 @@ function RoomPage({
                 <div className="message-content">
                   <div className="message-text">{isSystemMessage(msg) ? msg.text : (msg as DecryptedMessage).text}</div>
                   {!isSystemMessage(msg) && (msg as MessageWithAttachment).attachment && (
-                    <MessageAttachment 
-                      attachment={{
-                        ...(msg as MessageWithAttachment).attachment!,
-                        // Use decrypted URL if available
-                        url: (msg as MessageWithAttachment).attachment!.decryptedUrl || 
-                             (msg as MessageWithAttachment).attachment!.url
-                      }} 
+                    <MessageAttachment
+                      key={(msg as MessageWithAttachment).attachment!.id || (msg as MessageWithAttachment).attachment!.filename}
+                      attachment={(msg as MessageWithAttachment).attachment!}
                     />
                   )}
                   {!isSystemMessage(msg) && (msg as DecryptedMessage).decrypted && (

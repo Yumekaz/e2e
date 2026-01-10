@@ -130,7 +130,7 @@ class FileController {
         attachments: attachments.map(a => ({
           id: a.id,
           filename: a.encrypted ? a.original_name : a.filename,
-          url: `/uploads/${a.filepath}`,
+          url: `/api/files/${a.id}`,
           mimetype: a.encrypted ? a.original_type : a.mimetype,
           size: a.encrypted ? a.original_size : a.size,
           uploadedBy: a.username,

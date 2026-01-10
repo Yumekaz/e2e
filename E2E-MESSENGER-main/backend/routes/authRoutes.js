@@ -9,9 +9,9 @@ const authController = require('../controllers/authController');
 const { authenticateToken } = require('../middleware/auth');
 const { authRateLimiter } = require('../middleware/rateLimiter');
 
-// Public routes (with rate limiting)
-router.post('/register', authRateLimiter, authController.register.bind(authController));
-router.post('/login', authRateLimiter, authController.login.bind(authController));
+// Public routes (rate limiting removed for development)
+router.post('/register', authController.register.bind(authController));
+router.post('/login', authController.login.bind(authController));
 router.post('/refresh', authController.refresh.bind(authController));
 router.post('/logout', authController.logout.bind(authController));
 

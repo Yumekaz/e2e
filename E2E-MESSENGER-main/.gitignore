@@ -1,7 +1,15 @@
 # Dependencies
 node_modules/
+client/node_modules/
 .pnp
 .pnp.js
+
+# Lock files (optional - uncomment if you want to ignore)
+# package-lock.json
+# client/package-lock.json
+
+# Utilities/Scripts (dev only)
+view-database.js
 
 # Environment variables
 .env

@@ -40,19 +40,26 @@ function setupSocketHandlers(io) {
       if (state.usernames.has(username)) {
         // Check if the previous owner is still connected (Zombie check)
         const oldSocketId = state.userToSocket.get(username);
-        const oldSocket = io.sockets.sockets.get(oldSocketId);
+        const oldSocket = oldSocketId ? io.sockets.sockets.get(oldSocketId) : null;
 
+        // Only reject if there's an ACTIVE different socket with this username
         if (oldSocket && oldSocket.connected && oldSocket.id !== socket.id) {
           socket.emit('username-taken');
+          logger.warn('Username already in use by active socket', {
+            username,
+            newSocketId: socket.id,
+            existingSocketId: oldSocketId
+          });
           return;
         }
 
-        // If we get here, the old socket is dead or it's a re-registration
+        // Clean up zombie session (old socket disconnected or doesn't exist)
         if (oldSocketId && oldSocketId !== socket.id) {
           logger.info('Cleaning up zombie session', { username, oldSocketId });
           state.users.delete(oldSocketId);
           state.socketToRooms.delete(oldSocketId);
-          // We don't delete from usernames/userToSocket because we're about to overwrite them
+          state.usernames.delete(username);
+          state.userToSocket.delete(username);
         }
       }
 

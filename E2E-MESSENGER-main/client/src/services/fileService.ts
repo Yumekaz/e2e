@@ -154,12 +154,23 @@ class FileService {
 
     if (!response.ok) {
       let errorMessage = `Failed to download file (${response.status} ${response.statusText})`;
-      try {
-        const errorData = await response.json();
-        errorMessage = errorData.message || errorMessage;
-      } catch (e) {
-        // use default message with status code
+
+      // Provide user-friendly error messages
+      if (response.status === 401) {
+        errorMessage = "Authentication expired. Please log in again.";
+      } else if (response.status === 403) {
+        errorMessage = "You don't have permission to access this file.";
+      } else if (response.status === 404) {
+        errorMessage = "File not found. It may have been deleted.";
+      } else {
+        try {
+          const errorData = await response.json();
+          errorMessage = errorData.message || errorMessage;
+        } catch (e) {
+          // use default message with status code
+        }
       }
+
       throw new Error(errorMessage);
     }
 

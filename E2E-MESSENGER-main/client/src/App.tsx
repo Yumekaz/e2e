@@ -26,6 +26,7 @@ interface RoomState {
   roomCode: string;
   isOwner: boolean;
   memberKeys: Record<string, string>;
+  roomType?: 'legacy' | 'authenticated';
 }
 
 function App(): JSX.Element {
@@ -164,7 +165,7 @@ function App(): JSX.Element {
       showToast('Username taken. Try another!', 'error');
     });
 
-    socket.on('room-created', async ({ roomId, roomCode }: { roomId: string; roomCode: string }) => {
+    socket.on('room-created', async ({ roomId, roomCode, roomType }: { roomId: string; roomCode: string; roomType?: 'legacy' | 'authenticated' }) => {
       if (encryptionRef.current) {
         await encryptionRef.current.setRoomKey(roomCode, [encryptionRef.current.publicKeyExported!]);
 
@@ -172,10 +173,12 @@ function App(): JSX.Element {
           roomId,
           roomCode,
           isOwner: true,
-          memberKeys: { [username]: encryptionRef.current.publicKeyExported! }
+          memberKeys: { [username]: encryptionRef.current.publicKeyExported! },
+          roomType: roomType || 'legacy'
         });
         setCurrentPage('room');
-        showToast(`Room ${roomCode} created`, 'success');
+        const typeLabel = roomType === 'authenticated' ? ' (Authenticated)' : ' (Legacy)';
+        showToast(`Room ${roomCode} created${typeLabel}`, 'success');
       }
     });
 
@@ -185,13 +188,14 @@ function App(): JSX.Element {
       showToast(`${requesterName} wants to join`, 'info');
     });
 
-    socket.on('join-approved', async ({ roomId, roomCode, memberKeys }: { roomId: string; roomCode: string; memberKeys: Record<string, string> }) => {
+    socket.on('join-approved', async ({ roomId, roomCode, roomType, memberKeys }: { roomId: string; roomCode: string; roomType?: 'legacy' | 'authenticated'; memberKeys: Record<string, string> }) => {
       if (encryptionRef.current) {
         await encryptionRef.current.setRoomKey(roomCode, Object.values(memberKeys));
 
-        setCurrentRoom({ roomId, roomCode, isOwner: false, memberKeys });
+        setCurrentRoom({ roomId, roomCode, isOwner: false, memberKeys, roomType: roomType || 'legacy' });
         setCurrentPage('room');
-        showToast('🔐 Joined secure room', 'success');
+        const typeLabel = roomType === 'authenticated' ? ' (Authenticated)' : '';
+        showToast(`🔐 Joined secure room${typeLabel}`, 'success');
       }
     });
 
@@ -386,6 +390,7 @@ function App(): JSX.Element {
           encryption={encryptionRef.current}
           onUpdateRoomKey={handleUpdateRoomKey}
           onLeave={handleLeaveRoom}
+          roomType={currentRoom.roomType}
         />
       )}
 
